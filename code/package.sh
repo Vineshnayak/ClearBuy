@@ -15,7 +15,7 @@ fi
 echo "Packaging code.zip..."
 # We run from the parent directory to structure the zip nicely
 cd ..
-zip -r hackerrank-orchestrate-september26/code.zip code/ -x "*.venv*" "*__pycache__*" "*.pytest_cache*" "code/.env" "code/.DS_Store"
+zip -r hackerrank-orchestrate-september26/code.zip code/ -x "*.venv*" "*venv*" "*env*" "*node_modules*" "*build*" "*dist*" "*__pycache__*" "*.pytest_cache*" "*.mypy_cache*" "*.ruff_cache*" "*data/*" "*dataset/*" "*.env" "code/.DS_Store" "*.log" "*.tmp"
 
 echo "Success! Your submission files are ready in hackerrank-orchestrate-september26/:"
 echo "- code.zip"

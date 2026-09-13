@@ -14,7 +14,7 @@ class ExtractorProvider:
         self.groq_client = Groq(api_key=config.GROQ_API_KEY) if config.GROQ_API_KEY else None
         if config.GEMINI_API_KEY:
             genai.configure(api_key=config.GEMINI_API_KEY)
-            self.gemini_model = genai.GenerativeModel("gemini-1.5-pro-latest")
+            self.gemini_model = genai.GenerativeModel("gemini-1.5-flash")
         else:
             self.gemini_model = None
 
