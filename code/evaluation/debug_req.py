@@ -12,18 +12,19 @@ def main():
     truth_file = os.path.join(repo_root, "dataset", "sample_requests.csv")
     
     orchestrator = ClearBuyOrchestrator(use_mock=True)
-    orchestrator.data_loader.load_all()
-    
-    req_id = "request_21"
-    
-    # Load req row manually because we need it
+    orchestrator = ClearBuyOrchestrator(use_mock=True)
     with open(truth_file, "r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
-            if row["request_id"] == req_id:
-                orchestrator.data_loader.requests[req_id] = row
+            if row["request_id"] == "request_21":
+                r = row.copy()
+                r['allows_partial_payment'] = r['allows_partial_payment'].lower() == 'true'
+                r['requested_amount'] = float(r['requested_amount'])
+                from models.schemas import RequestRow
+                orchestrator.data_loader.requests["request_21"] = RequestRow(**r)
                 break
-                
+    req_id = "request_21"
+    
     data = orchestrator.extractor.process_request_data(req_id)
     engine = FinancialEngine(
         request=data["request"],
@@ -40,6 +41,9 @@ def main():
         
     safe = engine.calculate_amount_safe_to_pay()
     print("Safe calculated:", safe)
+    
+    out = orchestrator.process_request(req_id)
+    print("Orchestrator returned safe amount:", out.amount_safe_to_pay)
 
 if __name__ == "__main__":
     main()

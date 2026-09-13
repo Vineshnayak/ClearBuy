@@ -109,6 +109,7 @@ class FinancialEngine:
                 dates = [datetime.strptime(i.settlement_date if i.settlement_date else i.event_date, '%Y-%m-%d') for i in items]
                 diffs = [(dates[i+1] - dates[i]).days for i in range(len(dates)-1)]
                 med_diff = statistics.median(diffs) if diffs else 0
+                print(f"Cat {cat}: len {len(dates)}, med_diff {med_diff}")
                 
                 # Monthly
                 if 25 <= med_diff <= 35:
@@ -161,6 +162,7 @@ class FinancialEngine:
                             daily_rate = int(sum(recent_amts) / 90)
                         else:
                             daily_rate = 0
+                        print(f"Var category {cat}: total {sum(recent_amts)}, daily_rate {daily_rate}")
                             
                         curr = fc.start_date
                         while curr <= fc.end_date:
