@@ -85,3 +85,40 @@ class ExtractorProvider:
             amended_date="2025-08-15" if "2025-08-15" in text else None,
             is_confirmed="konfirmasi" in text or "confirmed" in text
         )
+
+    def generate_explanation(self, request: Any, math_result: dict) -> str:
+        if not self.groq_client:
+            return self.mock_explanation(request, math_result)
+            
+        prompt = f"""
+        You are a financial AI. The deterministic engine has decided the following for the user's request to spend {request.requested_amount} on {request.request_type}:
+        - Status: {math_result['affordability_status']}
+        - Recommended Method: {math_result['recommended_payment_method']}
+        - Amount Safe to Pay Today: {math_result['amount_safe_to_pay']}
+        
+        Write a single concise sentence explaining this decision to the user.
+        Do not add fluff, pleasantries, or additional numbers not provided.
+        """
+        
+        try:
+            response = self.groq_client.chat.completions.create(
+                model="mixtral-8x7b-32768",
+                messages=[
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.0
+            )
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            print(f"Error during explanation generation: {e}")
+            return self.mock_explanation(request, math_result)
+            
+    def mock_explanation(self, request: Any, math_result: dict) -> str:
+        if math_result['affordability_status'] == 'affordable_now':
+            return f"Pay {request.requested_amount} today. This leaves a safe margin available over the next 90 days."
+        elif math_result['affordability_status'] == 'affordable_with_plan':
+            return f"You can afford this using {math_result['recommended_payment_method']}."
+        elif math_result['affordability_status'] == 'affordable_later':
+            return f"Wait until {math_result['earliest_date_for_full_payment']} when you have sufficient funds."
+        else:
+            return "This request is not affordable within the next 90 days without breaking your minimum balance."
