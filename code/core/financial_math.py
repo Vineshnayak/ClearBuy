@@ -242,9 +242,8 @@ class FinancialEngine:
                 "requires_spending_changes": False
             })
             
-        # 3. Partial Payment
         if "partial_payment" in accepted_methods and self.request.allows_partial_payment:
-            if 0 < safe_to_pay < req_cents and earliest_full and earliest_full <= self.request.desired_completion_date:
+            if 0 < safe_to_pay < req_cents and earliest_full:
                 amount_1 = safe_to_pay
                 amount_2 = req_cents - safe_to_pay
                 

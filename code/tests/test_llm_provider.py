@@ -8,6 +8,11 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from core.llm_provider import ExtractorProvider
 from models.schemas import ExtractedEventFacts
 
+class MockUsage:
+    def __init__(self):
+        self.prompt_tokens = 10
+        self.completion_tokens = 20
+
 class MockResponse:
     class Message:
         def __init__(self, content):
@@ -17,6 +22,7 @@ class MockResponse:
             self.message = message
     def __init__(self, content):
         self.choices = [self.Choice(self.Message(content))]
+        self.usage = MockUsage()
 
 class MockGroqClient:
     def __init__(self, responses):

@@ -11,6 +11,7 @@ from engine import ClearBuyOrchestrator
 def main():
     parser = argparse.ArgumentParser(description="Run the ClearBuy batch orchestrator.")
     parser.add_argument("--mock", action="store_true", help="Run with mock LLM responses to save time/credits")
+    parser.add_argument("--request_id", type=str, help="Process and display a single request interactively")
     args = parser.parse_args()
 
     requests_path = os.path.join(config.DATASET_DIR, "requests.csv")
@@ -18,17 +19,25 @@ def main():
         print(f"Error: {requests_path} not found.")
         sys.exit(1)
 
-    print(f"Reading requests from {requests_path}...")
+    if not args.request_id:
+        print(f"Reading requests from {requests_path}...")
     
     requests = []
     with open(requests_path, "r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
+            if args.request_id and row['request_id'] != args.request_id:
+                continue
             row['allows_partial_payment'] = row['allows_partial_payment'].lower() == 'true'
             row['requested_amount'] = float(row['requested_amount'])
             requests.append(RequestRow(**row))
 
-    print(f"Loaded {len(requests)} requests. Initializing orchestrator (mock={args.mock})...")
+    if args.request_id and not requests:
+        print(f"Error: Request ID {args.request_id} not found.")
+        sys.exit(1)
+
+    if not args.request_id:
+        print(f"Loaded {len(requests)} requests. Initializing orchestrator (mock={args.mock})...")
     orchestrator = ClearBuyOrchestrator(use_mock=args.mock)
 
     outputs: List[OutputRow] = []
@@ -45,6 +54,22 @@ def main():
                 raise ValueError(f"Invalid status {out.affordability_status}")
                 
             outputs.append(out)
+            
+            if args.request_id:
+                print(f"\n======================================")
+                print(f"Request: {req.request_id} ({req.request_type})")
+                print(f"Amount: {req.requested_amount}")
+                print(f"======================================")
+                print(f"Status: {out.affordability_status}")
+                print(f"Recommended Method: {out.recommended_payment_method}")
+                print(f"Amount Safe To Pay: {out.amount_safe_to_pay}")
+                print(f"Payment Plan: {out.payment_plan}")
+                print(f"Earliest Full Payment: {out.earliest_date_for_full_payment}")
+                print(f"Spending Changes: {out.spending_changes_needed}")
+                print(f"======================================")
+                print(f"Explanation: {out.decision_explanation}")
+                print(f"======================================\n")
+                
         except Exception as e:
             print(f"Error processing {req.request_id}: {e}")
             failed_requests.append(req.request_id)
@@ -59,6 +84,9 @@ def main():
                 spending_changes_needed="none",
                 decision_explanation=f"Error: {str(e)}"
             ))
+
+    if args.request_id:
+        return
 
     print(f"Finished processing. Processed {len(outputs)}/{len(requests)} requests.")
     if failed_requests:
