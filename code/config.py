@@ -9,5 +9,7 @@ class Config:
     LLM_PROVIDER = os.getenv("LLM_PROVIDER", "groq") # groq or gemini
     GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+    GROQ_TEXT_MODEL = os.getenv("GROQ_TEXT_MODEL", "llama3-8b-8192")
+    GROQ_REASONING_MODEL = os.getenv("GROQ_REASONING_MODEL", "mixtral-8x7b-32768")
 
 config = Config()

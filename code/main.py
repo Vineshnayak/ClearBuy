@@ -83,7 +83,30 @@ def main():
         for out in outputs:
             writer.writerow(out.model_dump())
 
-    print("Batch runner completed successfully.")
+    print("Generating usage report...")
+    usage_stats = orchestrator.llm_provider.usage_stats
+    groq_cost = (usage_stats["groq_prompt_tokens"] * 0.05 / 1e6) + (usage_stats["groq_completion_tokens"] * 0.08 / 1e6)
+    gemini_cost = (usage_stats["gemini_prompt_tokens"] * 3.5 / 1e6) + (usage_stats["gemini_completion_tokens"] * 10.5 / 1e6)
+    total_cost = groq_cost + gemini_cost
+    
+    report_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "evaluation", "usage_report.md")
+    os.makedirs(os.path.dirname(report_path), exist_ok=True)
+    with open(report_path, "w") as f:
+        f.write("# ClearBuy Token Usage Report\n\n")
+        f.write("## Groq (Text & Reasoning)\n")
+        f.write(f"- **Requests:** {usage_stats['groq_requests']}\n")
+        f.write(f"- **Prompt Tokens:** {usage_stats['groq_prompt_tokens']}\n")
+        f.write(f"- **Completion Tokens:** {usage_stats['groq_completion_tokens']}\n")
+        f.write(f"- **Cost:** ${groq_cost:.4f}\n\n")
+        f.write("## Gemini (Image Extraction)\n")
+        f.write(f"- **Requests:** {usage_stats['gemini_requests']}\n")
+        f.write(f"- **Prompt Tokens:** {usage_stats['gemini_prompt_tokens']}\n")
+        f.write(f"- **Completion Tokens:** {usage_stats['gemini_completion_tokens']}\n")
+        f.write(f"- **Cost:** ${gemini_cost:.4f}\n\n")
+        f.write("## Totals\n")
+        f.write(f"- **Total Estimated Cost:** ${total_cost:.4f}\n")
+        
+    print(f"Batch runner completed successfully. Estimated cost: ${total_cost:.4f}")
 
 if __name__ == "__main__":
     main()
