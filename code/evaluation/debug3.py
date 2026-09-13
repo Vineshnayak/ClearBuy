@@ -3,17 +3,10 @@ import os
 import csv
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from engine import ClearBuyOrchestrator
-from models.schemas import RequestRow
 from core.financial_math import FinancialEngine
 
 def main():
-    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "hackerrank-orchestrate-september26"))
-    truth_file = os.path.join(repo_root, "dataset", "sample_requests.csv")
     orchestrator = ClearBuyOrchestrator(use_mock=True)
-    with open(truth_file, "r", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            if row["request_id"] == "request_04":
                 r = row.copy()
                 r["allows_partial_payment"] = r["allows_partial_payment"].lower() == "true"
                 r["requested_amount"] = float(r["requested_amount"])
