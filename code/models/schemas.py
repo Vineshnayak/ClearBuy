@@ -66,6 +66,15 @@ class FinancialEvent(BaseModel):
         return int(round(self.amount * 100)) if self.amount is not None else None
         
     @property
+    def dates_and_amounts(self) -> str:
+        if not self.payments: return "none"
+        res = []
+        for p in self.payments:
+            amt_str = f"{p.amount:.2f}".rstrip('0').rstrip('.')
+            res.append(f"{p.date}:{amt_str}")
+        return "|".join(res)
+        
+    @property
     def minimum_allowed_amount_cents(self) -> Optional[int]:
         return int(round(self.minimum_allowed_amount * 100)) if self.minimum_allowed_amount is not None else None
 

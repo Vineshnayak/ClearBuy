@@ -82,9 +82,10 @@ class FinancialEngine:
             d_str = e.settlement_date if e.settlement_date else e.event_date
             if not d_str: continue
             
-            if e.status == 'settled':
-                groups[e.description].append(e)
-            elif e.status in ['scheduled', 'pending']:
+            if e.status in ['settled', 'scheduled', 'pending']:
+                groups[(e.category, e.direction)].append(e)
+                
+            if e.status in ['scheduled', 'pending']:
                 # Future confirmed
                 amt = self._convert_to_home(e.amount_cents, e.currency, d_str)
                 # Apply reductions if requested
@@ -94,15 +95,10 @@ class FinancialEngine:
                     amt = reduced_events[e.event_id]
                 fc.add_flow(d_str, amt, e.direction)
                 
-        # 2. Project recurring
-        for desc, items in groups.items():
+        # 2. Project recurring and variable
+        import statistics
+        for (cat, direction), items in groups.items():
             if len(items) >= 2:
-                # Need to check if there's a scheduled event that covers this already to avoid double counting
-                # A robust check is if a scheduled event with same description exists in future
-                has_scheduled_future = any(e.status in ['scheduled', 'pending'] and e.description == desc for e in self.events)
-                if has_scheduled_future:
-                    continue # handled above
-                    
                 items.sort(key=lambda x: datetime.strptime(x.settlement_date if x.settlement_date else x.event_date, '%Y-%m-%d'))
                 last_item = items[-1]
                 
@@ -110,32 +106,66 @@ class FinancialEngine:
                 if last_item.event_id in stopped_events:
                     continue
                     
-                amts = [self._convert_to_home(i.amount_cents, i.currency, i.settlement_date if i.settlement_date else i.event_date) for i in items]
-                max_amt = max(amts)
-                
-                if last_item.event_id in reduced_events:
-                    max_amt = reduced_events[last_item.event_id]
-                
                 dates = [datetime.strptime(i.settlement_date if i.settlement_date else i.event_date, '%Y-%m-%d') for i in items]
                 diffs = [(dates[i+1] - dates[i]).days for i in range(len(dates)-1)]
-                avg_diff = sum(diffs)/len(diffs) if diffs else 0
+                med_diff = statistics.median(diffs) if diffs else 0
                 
                 # Monthly
-                if 25 <= avg_diff <= 35:
-                    day = dates[-1].day
+                if 25 <= med_diff <= 35:
+                    days = [d.day for d in dates]
+                    best_day = max(set(days), key=days.count)
+                    
+                    valid_items = [i for i, d in zip(items, dates) if d.day == best_day]
+                    proj_item = valid_items[-1] if valid_items else last_item
+                    
+                    proj_amt = self._convert_to_home(proj_item.amount_cents, proj_item.currency, proj_item.settlement_date if proj_item.settlement_date else proj_item.event_date)
+                    if proj_item.event_id in reduced_events:
+                        proj_amt = reduced_events[proj_item.event_id]
+                        
                     curr = fc.start_date
                     while curr <= fc.end_date:
-                        if curr.day == day:
-                            fc.add_flow(curr.strftime('%Y-%m-%d'), max_amt, last_item.direction)
+                        if curr.day == best_day:
+                            fc.add_flow(curr.strftime('%Y-%m-%d'), proj_amt, direction)
                         curr += timedelta(days=1)
                 # Weekly
-                elif 6 <= avg_diff <= 8:
-                    weekday = dates[-1].weekday()
+                elif 6 <= med_diff <= 8:
+                    weekdays = [d.weekday() for d in dates]
+                    best_weekday = max(set(weekdays), key=weekdays.count)
+                    
+                    valid_items = [i for i, d in zip(items, dates) if d.weekday() == best_weekday]
+                    proj_item = valid_items[-1] if valid_items else last_item
+                    
+                    proj_amt = self._convert_to_home(proj_item.amount_cents, proj_item.currency, proj_item.settlement_date if proj_item.settlement_date else proj_item.event_date)
+                    if proj_item.event_id in reduced_events:
+                        proj_amt = reduced_events[proj_item.event_id]
+                        
                     curr = fc.start_date
                     while curr <= fc.end_date:
-                        if curr.weekday() == weekday:
-                            fc.add_flow(curr.strftime('%Y-%m-%d'), max_amt, last_item.direction)
+                        if curr.weekday() == best_weekday:
+                            fc.add_flow(curr.strftime('%Y-%m-%d'), proj_amt, direction)
                         curr += timedelta(days=1)
+                else:
+                    # Variable spending (e.g. groceries, transport)
+                    if direction == 'debit':
+                        # Use only the last 90 days of events before request_date for variable rates
+                        req_date = datetime.strptime(self.request.request_date, '%Y-%m-%d')
+                        cutoff = req_date - timedelta(days=90)
+                        
+                        recent_amts = []
+                        for i, d in zip(items, dates):
+                            if cutoff <= d <= req_date:
+                                amt = self._convert_to_home(i.amount_cents, i.currency, i.settlement_date if i.settlement_date else i.event_date)
+                                recent_amts.append(amt)
+                                
+                        if recent_amts:
+                            daily_rate = int(sum(recent_amts) / 90)
+                        else:
+                            daily_rate = 0
+                            
+                        curr = fc.start_date
+                        while curr <= fc.end_date:
+                            fc.add_flow(curr.strftime('%Y-%m-%d'), daily_rate, 'debit')
+                            curr += timedelta(days=1)
                         
         return fc
 
@@ -164,6 +194,9 @@ class FinancialEngine:
             curr += timedelta(days=1)
         return None
         
+    def _format_amt(self, amt: float) -> str:
+        return f"{amt:.2f}".rstrip('0').rstrip('.')
+        
     def evaluate(self) -> dict:
         # Check amount_safe_to_pay and earliest_date_for_full_payment
         safe_to_pay = self.calculate_amount_safe_to_pay()
@@ -186,7 +219,7 @@ class FinancialEngine:
             
             plans.append({
                 "method": "full_payment",
-                "plan_str": f"{self.request.request_date}:{self.request.requested_amount}",
+                "plan_str": f"{self.request.request_date}:{self._format_amt(self.request.requested_amount)}",
                 "completion_date": completion_date,
                 "total_paid": req_cents,
                 "num_payments": 1,
@@ -200,7 +233,7 @@ class FinancialEngine:
         if "full_payment" in accepted_methods and earliest_full: # if wait is basically full payment later
             plans.append({
                 "method": "wait",
-                "plan_str": f"{earliest_full}:{self.request.requested_amount}",
+                "plan_str": f"{earliest_full}:{self._format_amt(self.request.requested_amount)}",
                 "completion_date": earliest_full,
                 "total_paid": req_cents,
                 "num_payments": 1,
@@ -226,7 +259,7 @@ class FinancialEngine:
                     amt2_float = amount_2 / 100.0
                     plans.append({
                         "method": "partial_payment",
-                        "plan_str": f"{self.request.request_date}:{amt1_float:g}|{earliest_full}:{amt2_float:g}",
+                        "plan_str": f"{self.request.request_date}:{self._format_amt(amt1_float)}|{earliest_full}:{self._format_amt(amt2_float)}",
                         "completion_date": earliest_full,
                         "total_paid": req_cents,
                         "num_payments": 2,
@@ -250,7 +283,7 @@ class FinancialEngine:
                 for i in range(opt.number_of_payments):
                     d_str = curr.strftime('%Y-%m-%d')
                     test_fc.add_flow(d_str, opt.payment_amount_cents, 'debit')
-                    payment_strings.append(f"{d_str}:{opt.payment_amount:g}")
+                    payment_strings.append(f"{d_str}:{self._format_amt(opt.payment_amount)}")
                     curr += timedelta(days=days_gap)
                     
                 safe = test_fc.is_safe()
