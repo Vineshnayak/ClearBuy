@@ -26,7 +26,7 @@ def get_base_req_prof(req_amt=25000, curr_bal=50000, min_bal=10000):
         expense_categories_to_protect="",
         expense_categories_user_is_willing_to_reduce="",
         expense_categories_user_is_willing_to_stop="",
-        payment_methods_user_will_consider="full_payment, partial_payment, installments",
+        payment_methods_user_will_consider="full_payment, installments",
         max_installment_months=None
     )
     return req, prof

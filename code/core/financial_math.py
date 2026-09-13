@@ -118,8 +118,6 @@ class FinancialEngine:
                 
                 dates = [datetime.strptime(i.settlement_date if i.settlement_date else i.event_date, '%Y-%m-%d') for i in items]
                 diffs = [(dates[i+1] - dates[i]).days for i in range(len(dates)-1)]
-                avg_diff = statistics.mean(diffs) if diffs else 0
-                import statistics
                 avg_diff = sum(diffs)/len(diffs) if diffs else 0
                 
                 # Monthly
