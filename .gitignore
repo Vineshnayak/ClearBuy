@@ -1,0 +1,24 @@
+# Environments
+.env
+.venv/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# macOS
+.DS_Store
+
+# IDEs
+.vscode/
+.idea/
+
+# Hackathon specific large files or generated files
+# (Optional) Uncomment if you don't want to commit the dataset
+# hackerrank-orchestrate-september26/dataset/
