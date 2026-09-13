@@ -54,8 +54,8 @@ class FinancialEngine:
         # Naive lookup for exchange rate if needed
         # Since hackathon says output is in home_currency, we apply rate here
         for r in self.rates:
-            if r['rate_date'] == date_str and r['from_currency'] == currency and r['to_currency'] == self.profile.home_currency:
-                return int(round(amount_cents * float(r['rate'])))
+            if r.rate_date == date_str and r.from_currency == currency and r.to_currency == self.profile.home_currency:
+                return int(round(amount_cents * float(r.rate)))
         return amount_cents # Fallback
         
     def build_base_forecast(self, stopped_events=None, reduced_events=None) -> CashFlowForecast:
