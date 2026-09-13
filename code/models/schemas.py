@@ -10,6 +10,10 @@ class RequestRow(BaseModel):
     desired_completion_date: str
     allows_partial_payment: bool
     request_text: str
+    
+    @property
+    def requested_amount_cents(self) -> int:
+        return int(round(self.requested_amount * 100))
 
 class OutputRow(BaseModel):
     request_id: str
@@ -32,6 +36,14 @@ class FinancialProfile(BaseModel):
     expense_categories_user_is_willing_to_stop: str
     payment_methods_user_will_consider: str
     max_installment_months: Optional[int]
+    
+    @property
+    def current_available_balance_cents(self) -> int:
+        return int(round(self.current_available_balance * 100))
+        
+    @property
+    def minimum_balance_to_keep_cents(self) -> int:
+        return int(round(self.minimum_balance_to_keep * 100))
 
 class FinancialEvent(BaseModel):
     event_id: str
@@ -48,6 +60,14 @@ class FinancialEvent(BaseModel):
     linked_event_id: Optional[str]
     flexibility: str
     minimum_allowed_amount: Optional[float]
+    
+    @property
+    def amount_cents(self) -> Optional[int]:
+        return int(round(self.amount * 100)) if self.amount is not None else None
+        
+    @property
+    def minimum_allowed_amount_cents(self) -> Optional[int]:
+        return int(round(self.minimum_allowed_amount * 100)) if self.minimum_allowed_amount is not None else None
 
 class ExchangeRate(BaseModel):
     rate_date: str
@@ -65,6 +85,14 @@ class PaymentOption(BaseModel):
     payment_frequency_days: Optional[int]
     financing_fee: float
     total_payable_amount: float
+    
+    @property
+    def payment_amount_cents(self) -> int:
+        return int(round(self.payment_amount * 100))
+        
+    @property
+    def total_payable_amount_cents(self) -> int:
+        return int(round(self.total_payable_amount * 100))
 
 class Message(BaseModel):
     message_id: str
