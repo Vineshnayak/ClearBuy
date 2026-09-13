@@ -58,6 +58,74 @@ class FinancialEngine:
                 return int(round(amount_cents * float(r.rate)))
         return amount_cents # Fallback
         
+    def _project_recurring_events(self, fc: CashFlowForecast, groups: dict, stopped_events: set, reduced_events: dict):
+        import statistics
+        for (cat, direction), items in groups.items():
+            if len(items) >= 2:
+                items.sort(key=lambda x: datetime.strptime(x.settlement_date if x.settlement_date else x.event_date, '%Y-%m-%d'))
+                last_item = items[-1]
+                
+                if last_item.event_id in stopped_events:
+                    continue
+                    
+                dates = [datetime.strptime(i.settlement_date if i.settlement_date else i.event_date, '%Y-%m-%d') for i in items]
+                diffs = [(dates[i+1] - dates[i]).days for i in range(len(dates)-1)]
+                med_diff = statistics.median(diffs) if diffs else 0
+                
+                # Determine safe amount
+                amts = [self._convert_to_home(i.amount_cents, i.currency, i.settlement_date if i.settlement_date else i.event_date) for i in items]
+                proj_amt = max(amts) if direction == 'debit' else min(amts)
+                
+                if last_item.event_id in reduced_events:
+                    proj_amt = reduced_events[last_item.event_id]
+                    
+                if 25 <= med_diff <= 35:
+                    days = [d.day for d in dates]
+                    best_day = max(set(days), key=days.count)
+                    curr = fc.start_date
+                    while curr <= fc.end_date:
+                        if curr.day == best_day:
+                            fc.add_flow(curr.strftime('%Y-%m-%d'), proj_amt, direction)
+                        curr += timedelta(days=1)
+                elif 6 <= med_diff <= 8:
+                    weekdays = [d.weekday() for d in dates]
+                    best_weekday = max(set(weekdays), key=weekdays.count)
+                    curr = fc.start_date
+                    while curr <= fc.end_date:
+                        if curr.weekday() == best_weekday:
+                            fc.add_flow(curr.strftime('%Y-%m-%d'), proj_amt, direction)
+                        curr += timedelta(days=1)
+
+    def _project_variable_events(self, fc: CashFlowForecast, groups: dict):
+        import statistics
+        var_groups = []
+        for (cat, direction), items in groups.items():
+            if len(items) >= 2:
+                dates = [datetime.strptime(i.settlement_date if i.settlement_date else i.event_date, '%Y-%m-%d') for i in items]
+                diffs = [(dates[i+1] - dates[i]).days for i in range(len(dates)-1)]
+                med_diff = statistics.median(diffs) if diffs else 0
+                if not (25 <= med_diff <= 35) and not (6 <= med_diff <= 8) and direction == 'debit':
+                    var_groups.append((cat, items, dates))
+                    
+        # Sum all variable expenses within the last 90 days of events
+        req_date = datetime.strptime(self.request.request_date, '%Y-%m-%d')
+        cutoff = req_date - timedelta(days=90)
+        
+        daily_var_drain = 0
+        for cat, items, dates in var_groups:
+            recent_amts = []
+            for i, d in zip(items, dates):
+                if cutoff <= d <= req_date:
+                    amt = self._convert_to_home(i.amount_cents, i.currency, i.settlement_date if i.settlement_date else i.event_date)
+                    recent_amts.append(amt)
+            if recent_amts:
+                daily_var_drain += int(sum(recent_amts) / 90)
+                
+        curr = fc.start_date
+        while curr <= fc.end_date:
+            fc.add_flow(curr.strftime('%Y-%m-%d'), daily_var_drain, 'debit')
+            curr += timedelta(days=1)
+
     def build_base_forecast(self, stopped_events=None, reduced_events=None) -> CashFlowForecast:
         """
         Builds the 90 day cash flow forecast.
@@ -95,79 +163,8 @@ class FinancialEngine:
                     amt = reduced_events[e.event_id]
                 fc.add_flow(d_str, amt, e.direction)
                 
-        # 2. Project recurring and variable
-        import statistics
-        for (cat, direction), items in groups.items():
-            if len(items) >= 2:
-                items.sort(key=lambda x: datetime.strptime(x.settlement_date if x.settlement_date else x.event_date, '%Y-%m-%d'))
-                last_item = items[-1]
-                
-                # Check if it's stoppable and currently stopped
-                if last_item.event_id in stopped_events:
-                    continue
-                    
-                dates = [datetime.strptime(i.settlement_date if i.settlement_date else i.event_date, '%Y-%m-%d') for i in items]
-                diffs = [(dates[i+1] - dates[i]).days for i in range(len(dates)-1)]
-                med_diff = statistics.median(diffs) if diffs else 0
-                print(f"Cat {cat}: len {len(dates)}, med_diff {med_diff}")
-                
-                # Monthly
-                if 25 <= med_diff <= 35:
-                    days = [d.day for d in dates]
-                    best_day = max(set(days), key=days.count)
-                    
-                    valid_items = [i for i, d in zip(items, dates) if d.day == best_day]
-                    proj_item = valid_items[-1] if valid_items else last_item
-                    
-                    proj_amt = self._convert_to_home(proj_item.amount_cents, proj_item.currency, proj_item.settlement_date if proj_item.settlement_date else proj_item.event_date)
-                    if proj_item.event_id in reduced_events:
-                        proj_amt = reduced_events[proj_item.event_id]
-                        
-                    curr = fc.start_date
-                    while curr <= fc.end_date:
-                        if curr.day == best_day:
-                            fc.add_flow(curr.strftime('%Y-%m-%d'), proj_amt, direction)
-                        curr += timedelta(days=1)
-                # Weekly
-                elif 6 <= med_diff <= 8:
-                    weekdays = [d.weekday() for d in dates]
-                    best_weekday = max(set(weekdays), key=weekdays.count)
-                    
-                    valid_items = [i for i, d in zip(items, dates) if d.weekday() == best_weekday]
-                    proj_item = valid_items[-1] if valid_items else last_item
-                    
-                    proj_amt = self._convert_to_home(proj_item.amount_cents, proj_item.currency, proj_item.settlement_date if proj_item.settlement_date else proj_item.event_date)
-                    if proj_item.event_id in reduced_events:
-                        proj_amt = reduced_events[proj_item.event_id]
-                        
-                    curr = fc.start_date
-                    while curr <= fc.end_date:
-                        if curr.weekday() == best_weekday:
-                            fc.add_flow(curr.strftime('%Y-%m-%d'), proj_amt, direction)
-                        curr += timedelta(days=1)
-                else:
-                    # Variable spending (e.g. groceries, transport)
-                    if direction == 'debit':
-                        # Use only the last 90 days of events before request_date for variable rates
-                        req_date = datetime.strptime(self.request.request_date, '%Y-%m-%d')
-                        cutoff = req_date - timedelta(days=90)
-                        
-                        recent_amts = []
-                        for i, d in zip(items, dates):
-                            if cutoff <= d <= req_date:
-                                amt = self._convert_to_home(i.amount_cents, i.currency, i.settlement_date if i.settlement_date else i.event_date)
-                                recent_amts.append(amt)
-                                
-                        if recent_amts:
-                            daily_rate = int(sum(recent_amts) / 90)
-                        else:
-                            daily_rate = 0
-                        print(f"Var category {cat}: total {sum(recent_amts)}, daily_rate {daily_rate}")
-                            
-                        curr = fc.start_date
-                        while curr <= fc.end_date:
-                            fc.add_flow(curr.strftime('%Y-%m-%d'), daily_rate, 'debit')
-                            curr += timedelta(days=1)
+        self._project_recurring_events(fc, groups, stopped_events, reduced_events)
+        self._project_variable_events(fc, groups)
                         
         return fc
 
